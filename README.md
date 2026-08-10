@@ -13,18 +13,25 @@ npm run preview  # معاينة مخرجات البناء
 npm run lint     # فحص الكود
 ```
 
-## النشر على Render (Static Site)
+## النشر على Render
 
-ملف [`render.yaml`](render.yaml) يحتوي كل الإعدادات (البناء + رؤوس الأمان + التخزين المؤقت).
-اربط المستودع بـ Render وسيقرأه تلقائياً، أو اضبط يدوياً:
+### الطريقة الموصى بها: Blueprint
 
-| الإعداد | القيمة |
+ملف [`render.yaml`](render.yaml) يحتوي كل الإعدادات. **Render لا يقرأ هذا الملف إلا عبر
+Blueprint** — من لوحة التحكم: **New → Blueprint** ثم اختر المستودع.
+
+### أو يدوياً: New → Static Site
+
+في هذه الحالة يُتجاهل `render.yaml` تماماً ويجب إدخال القيم بنفسك:
+
+| الحقل | القيمة |
 | --- | --- |
 | Build Command | `npm ci && npm run build` |
 | Publish Directory | `dist` |
-| Node Version | 20 أو أحدث |
+| Environment Variable | `NODE_VERSION` = `22.12.0` |
 
-الموقع صفحة واحدة بدون توجيه (routing)، لذلك لا يحتاج إلى قواعد rewrite.
+> Vite 8 يتطلب Node ‏`>=22.12`. لو كانت نسخة Node على Render أقدم، يفشل البناء
+> ويظهر **Not Found** لأن مجلد `dist` لا يُنشأ أصلاً. الملف `.node-version` يثبّت النسخة.
 
 ### رؤوس الأمان المفعّلة
 

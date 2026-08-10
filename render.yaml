@@ -5,6 +5,18 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
 
+    envVars:
+      # Vite 8 needs Node >= 22.12; Render's default is older on some accounts.
+      - key: NODE_VERSION
+        value: 22.12.0
+
+    # Single page app: any unknown path still serves index.html instead of 404.
+    # Render matches real files first, so /assets/* and /images/* are unaffected.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
     headers:
       # --- Security ---
       - path: /*
