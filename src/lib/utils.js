@@ -94,14 +94,52 @@ export function buildWhatsAppOrderUrl({ orderId, cartDetails, customer, paymentL
 
   lines.push('');
   lines.push('👤 بيانات التوصيل:');
-  lines.push(`الاسم: ${customer.name}`);
-  lines.push(`الجوال: ${customer.phone}`);
+  lines.push(`الاسم: ${customer.name.trim()}`);
+  lines.push(`الجوال: ${customer.phone.trim()}`);
   lines.push(`المدينة: ${customer.city}`);
-  lines.push(`الحي / العنوان: ${customer.address}`);
+
+  // The address is optional — when it is missing, say so instead of sending a
+  // blank line, so the order can be completed in the chat.
+  const address = customer.address.trim();
+  lines.push(address ? `الحي / العنوان: ${address}` : 'الحي / العنوان: (سأرسله هنا في المحادثة)');
+
   lines.push(`طريقة الدفع المفضلة: ${paymentLabel}`);
   if (customer.notes.trim()) lines.push(`ملاحظات: ${customer.notes.trim()}`);
 
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(lines.join('\n'))}`;
+}
+
+/**
+ * Opens a URL in a new tab as reliably as possible. `window.open` is silently
+ * blocked inside in-app browsers (Instagram, Snapchat), which is where a lot of
+ * store traffic comes from — a synthetic anchor click gets through more often.
+ * Returns false when nothing could be opened, so the caller can offer a link.
+ */
+export function openExternal(url) {
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    return true;
+  } catch {
+    return Boolean(window.open(url, '_blank', 'noopener'));
+  }
+}
+
+/** Remembers the buyer's details so a repeat order is a two-tap affair. */
+export function sanitizeCustomer(stored) {
+  if (!stored || typeof stored !== 'object') return null;
+  const text = (value, max) => (typeof value === 'string' ? value.slice(0, max) : '');
+  return {
+    name: text(stored.name, 60),
+    phone: text(stored.phone, 15),
+    city: text(stored.city, 40),
+    address: text(stored.address, 160)
+  };
 }
 
 /** Quick "ask about this product" link used on product cards and the footer. */

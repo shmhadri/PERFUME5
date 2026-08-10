@@ -1562,6 +1562,11 @@ select.search-input option {
   margin-top: 4px;
 }
 
+.field-optional {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 .search-input[aria-invalid='true'] {
   border-color: var(--danger);
 }

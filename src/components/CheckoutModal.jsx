@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, CheckCircle, MessageCircle, ShieldCheck } from 'lucide-react';
 import useOverlay from '../hooks/useOverlay';
+import useLocalStorage from '../hooks/useLocalStorage';
 import { WHATSAPP_DISPLAY } from '../data/products';
-import { buildWhatsAppOrderUrl, formatPrice, isValidSaudiPhone } from '../lib/utils';
+import {
+  buildWhatsAppOrderUrl, formatPrice, isValidSaudiPhone, openExternal, sanitizeCustomer
+} from '../lib/utils';
 
 const CITIES = [
   'الرياض',
@@ -41,23 +44,37 @@ const EMPTY_FORM = {
 };
 
 export default function CheckoutModal({ isOpen, onClose, cartDetails, onClearCart }) {
+  // Remembered from the last order so a repeat buyer only has to press the button.
+  const [savedCustomer, setSavedCustomer] = useLocalStorage('tolaty:customer', null, sanitizeCustomer);
+
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
   const [orderComplete, setOrderComplete] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [whatsAppUrl, setWhatsAppUrl] = useState('');
   const cardRef = useRef(null);
+  const formRef = useRef(null);
 
   useOverlay(isOpen && Boolean(cartDetails), onClose, cardRef);
 
-  // Start from a clean slate every time the checkout is reopened.
+  // Read through a ref so that saving the buyer's details on submit does not
+  // re-run the reset effect below and bounce them off the success screen.
+  const savedCustomerRef = useRef(savedCustomer);
+  savedCustomerRef.current = savedCustomer;
+
+  // Start from a clean slate every time the checkout is reopened, pre-filled
+  // with whatever the buyer entered last time.
   useEffect(() => {
-    if (isOpen) {
-      setOrderComplete(false);
-      setOrderId('');
-      setWhatsAppUrl('');
-      setErrors({});
-    }
+    if (!isOpen) return;
+    setOrderComplete(false);
+    setOrderId('');
+    setWhatsAppUrl('');
+    setErrors({});
+    setFormData((current) => ({
+      ...EMPTY_FORM,
+      ...savedCustomerRef.current,
+      paymentMethod: current.paymentMethod
+    }));
   }, [isOpen]);
 
   if (!isOpen || !cartDetails) return null;
@@ -65,16 +82,24 @@ export default function CheckoutModal({ isOpen, onClose, cartDetails, onClearCar
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((current) => ({ ...current, [name]: value }));
-    setErrors((current) => ({ ...current, [name]: '' }));
+    setErrors((current) => (current[name] ? { ...current, [name]: '' } : current));
   };
 
+  // Only what we genuinely cannot complete the order without: a name to address
+  // the buyer by and a number to reach them on. The address can be settled in
+  // the chat, so it never blocks the order.
   const validate = () => {
     const nextErrors = {};
-    if (formData.name.trim().length < 3) nextErrors.name = 'الرجاء إدخال الاسم الكامل (3 أحرف على الأقل)';
+    if (formData.name.trim().length < 2) nextErrors.name = 'الرجاء إدخال اسمك';
     if (!isValidSaudiPhone(formData.phone)) nextErrors.phone = 'رقم جوال سعودي غير صحيح، مثال: 0551234567';
-    if (formData.address.trim().length < 6) nextErrors.address = 'الرجاء كتابة الحي والعنوان التفصيلي';
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+
+    const firstInvalid = Object.keys(nextErrors)[0];
+    if (firstInvalid) {
+      formRef.current?.querySelector(`[name="${firstInvalid}"]`)?.focus();
+      return false;
+    }
+    return true;
   };
 
   const handleSubmitOrder = (e) => {
@@ -90,19 +115,22 @@ export default function CheckoutModal({ isOpen, onClose, cartDetails, onClearCar
       paymentLabel
     });
 
-    // Opened straight from the click so the browser does not block it.
-    window.open(url, '_blank', 'noopener');
+    // Fired straight from the click so in-app browsers do not block the handoff.
+    openExternal(url);
 
+    setSavedCustomer({
+      name: formData.name,
+      phone: formData.phone,
+      city: formData.city,
+      address: formData.address
+    });
     setOrderId(newId);
     setWhatsAppUrl(url);
     setOrderComplete(true);
     onClearCart();
   };
 
-  const handleClose = () => {
-    if (orderComplete) setFormData(EMPTY_FORM);
-    onClose();
-  };
+  const handleClose = () => onClose();
 
   return (
     <div className="modal-backdrop" onClick={handleClose}>
@@ -140,13 +168,16 @@ export default function CheckoutModal({ isOpen, onClose, cartDetails, onClearCar
               <div className="checkout-summary-list">
                 <div><strong>الاسم:</strong> {formData.name}</div>
                 <div><strong>رقم الجوال:</strong> {formData.phone}</div>
-                <div><strong>المدينة والحي:</strong> {formData.city} - {formData.address}</div>
+                <div>
+                  <strong>المدينة:</strong> {formData.city}
+                  {formData.address.trim() ? ` - ${formData.address.trim()}` : ' (العنوان يُستكمل في المحادثة)'}
+                </div>
                 <div><strong>المبلغ الإجمالي:</strong> {formatPrice(cartDetails.total)} ر.س</div>
               </div>
             </div>
 
             <div className="checkout-success-actions">
-              <a className="btn-primary btn-gold" href={whatsAppUrl} target="_blank" rel="noopener noreferrer">
+              <a className="btn-primary btn-whatsapp" href={whatsAppUrl} target="_blank" rel="noopener noreferrer">
                 <MessageCircle size={18} aria-hidden="true" />
                 <span>إرسال الطلب على الواتساب</span>
               </a>
@@ -162,15 +193,15 @@ export default function CheckoutModal({ isOpen, onClose, cartDetails, onClearCar
             <div className="checkout-head">
               <h2 className="modal-title">بيانات التوصيل</h2>
               <p className="modal-desc">
-                عبّئ بياناتك وسيتم تحويلك إلى الواتساب ({WHATSAPP_DISPLAY}) مع تفاصيل طلبك جاهزة للإرسال.
+                الاسم ورقم الجوال فقط مطلوبان — والباقي نكمله معك في الواتساب ({WHATSAPP_DISPLAY}).
               </p>
             </div>
 
-            <form onSubmit={handleSubmitOrder} noValidate>
+            <form onSubmit={handleSubmitOrder} noValidate ref={formRef}>
 
               <div className="checkout-fields">
                 <div className="form-field">
-                  <label htmlFor="co-name">الاسم الكامل *</label>
+                  <label htmlFor="co-name">الاسم *</label>
                   <input
                     id="co-name"
                     maxLength={60}
@@ -222,23 +253,21 @@ export default function CheckoutModal({ isOpen, onClose, cartDetails, onClearCar
                 </div>
 
                 <div className="form-field">
-                  <label htmlFor="co-address">الحي والعنوان التفصيلي *</label>
+                  <label htmlFor="co-address">الحي والعنوان <span className="field-optional">(اختياري)</span></label>
                   <input
                     id="co-address"
                     maxLength={160}
                     type="text"
                     name="address"
                     className="search-input"
-                    placeholder="الحي، اسم الشارع، أقرب معلم..."
+                    placeholder="اتركه فارغاً وسنأخذه منك في الواتساب"
                     value={formData.address}
                     onChange={handleChange}
-                    aria-invalid={Boolean(errors.address)}
                   />
-                  {errors.address && <span className="field-error">{errors.address}</span>}
                 </div>
 
                 <div className="form-field">
-                  <label htmlFor="co-notes">ملاحظات على الطلب (اختياري)</label>
+                  <label htmlFor="co-notes">ملاحظات على الطلب <span className="field-optional">(اختياري)</span></label>
                   <input
                     id="co-notes"
                     maxLength={200}
