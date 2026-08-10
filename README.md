@@ -13,6 +13,30 @@ npm run preview  # معاينة مخرجات البناء
 npm run lint     # فحص الكود
 ```
 
+## ⚠️ مهم: مجلد `dist` مرفوع مع المستودع
+
+خدمة Render الحالية حقل **Build Command** فيها فارغ، أي أنها تنشر محتوى
+المستودع كما هو دون بناء. لذلك يُرفع `dist` معه.
+
+**بعد أي تعديل على الكود، لا تنسَ:**
+
+```bash
+npm run build
+git add -A && git commit -m "وصف التعديل" && git push
+```
+
+لو نسيت `npm run build` سيظل الموقع المنشور على النسخة القديمة.
+
+### للتخلص من هذا القيد (مستحسن)
+
+في لوحة Render → Settings → **Build Command** اكتب `npm run build`، ثم:
+
+```bash
+git rm -r --cached dist
+# وأعد سطر dist إلى .gitignore
+git commit -m "الاعتماد على بناء Render" && git push
+```
+
 ## النشر على Render
 
 ### الطريقة الموصى بها: Blueprint

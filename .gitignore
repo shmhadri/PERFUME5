@@ -8,9 +8,12 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
 dist-ssr
 *.local
+
+# dist/ is committed on purpose: the Render service has an empty Build Command,
+# so it publishes whatever is in the repo without building. Run `npm run build`
+# and commit dist/ with every change. See README for how to drop this again.
 
 # Editor directories and files
 .vscode/*
